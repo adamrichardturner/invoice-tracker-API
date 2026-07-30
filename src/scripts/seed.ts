@@ -570,15 +570,16 @@ async function createInvoiceWithItems(index: number): Promise<void> {
 }
 
 async function ensureSeeded(): Promise<void> {
+    const targetCount = 250;
     const result = await pool.query(
         "SELECT COUNT(*)::int AS count FROM invoices",
     );
     const currentCount: number = result.rows[0].count;
-    if (currentCount >= 30) {
+    if (currentCount >= targetCount) {
         return;
     }
 
-    const toCreate = 30 - currentCount;
+    const toCreate = targetCount - currentCount;
     for (let i = 0; i < toCreate; i += 1) {
         // eslint-disable-next-line no-await-in-loop
         await createInvoiceWithItems(currentCount + i);

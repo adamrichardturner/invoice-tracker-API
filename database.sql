@@ -66,5 +66,9 @@ CREATE TABLE public.invoice_items (
 -- Create index on bill_to_email in invoices table
 CREATE INDEX idx_invoices_bill_to_email ON public.invoices USING btree (bill_to_email);
 
+-- Keyset pagination + status filtering
+CREATE INDEX idx_invoices_created_at_id_desc ON public.invoices USING btree (created_at DESC, id DESC);
+CREATE INDEX idx_invoices_status ON public.invoices USING btree (status);
+
 -- Create index on expire in session table
 CREATE INDEX "IDX_session_expire" ON public.session USING btree (expire);
