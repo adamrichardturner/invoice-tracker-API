@@ -29,7 +29,9 @@ export const getInvoices = async (req: Request, res: Response) => {
         const statusParam = req.query.status;
 
         const limit =
-            typeof limitParam === "string" ? Number.parseInt(limitParam, 10) : 20;
+            typeof limitParam === "string"
+                ? Number.parseInt(limitParam, 10)
+                : 20;
 
         if (Number.isNaN(limit)) {
             res.status(400).json({ message: "Invalid limit" });
@@ -51,7 +53,9 @@ export const getInvoices = async (req: Request, res: Response) => {
                     continue;
                 }
                 if (!allowedStatuses.has(status)) {
-                    res.status(400).json({ message: `Invalid status: ${status}` });
+                    res.status(400).json({
+                        message: `Invalid status: ${status}`,
+                    });
                     return;
                 }
                 statuses.push(status as "draft" | "pending" | "paid");
@@ -64,7 +68,9 @@ export const getInvoices = async (req: Request, res: Response) => {
                     continue;
                 }
                 if (!allowedStatuses.has(value)) {
-                    res.status(400).json({ message: `Invalid status: ${value}` });
+                    res.status(400).json({
+                        message: `Invalid status: ${value}`,
+                    });
                     return;
                 }
                 statuses.push(value as "draft" | "pending" | "paid");

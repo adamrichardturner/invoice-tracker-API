@@ -18,7 +18,10 @@ export interface PaginatedInvoices<T> {
     totalCount: number;
 }
 
-export function encodeInvoiceCursor(createdAt: Date | string, id: number): string {
+export function encodeInvoiceCursor(
+    createdAt: Date | string,
+    id: number,
+): string {
     const payload: InvoiceCursor = {
         createdAt: new Date(createdAt).toISOString(),
         id,

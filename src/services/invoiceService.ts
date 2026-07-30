@@ -71,12 +71,14 @@ export class InvoiceService {
                 ],
             );
             const invoice_id = result.rows[0].id;
+            const createdItems = [];
 
             for (const item of items || []) {
-                await client.query(
+                const itemResult = await client.query(
                     `INSERT INTO invoice_items (
                         invoice_id, item_description, item_quantity, item_price, item_total
-                    ) VALUES ($1, $2, $3, $4, $5)`,
+                    ) VALUES ($1, $2, $3, $4, $5)
+                    RETURNING id, invoice_id, item_description, item_quantity, item_price, item_total`,
                     [
                         invoice_id,
                         item.item_description,
@@ -87,13 +89,19 @@ export class InvoiceService {
                             .toNumber(),
                     ],
                 );
+                createdItems.push({
+                    ...itemResult.rows[0],
+                    id: String(itemResult.rows[0].id),
+                    invoice_id: String(itemResult.rows[0].invoice_id),
+                });
             }
 
             await client.query("COMMIT");
 
             return {
                 ...result.rows[0],
-                items,
+                id: String(result.rows[0].id),
+                items: createdItems,
             };
         } catch (err) {
             await client.query("ROLLBACK");
@@ -197,12 +205,19 @@ export class InvoiceService {
             const invoice = invoiceResult.rows[0];
 
             const itemsResult = await pool.query(
-                "SELECT * FROM invoice_items WHERE invoice_id = $1",
+                "SELECT id, invoice_id, item_description, item_quantity, item_price, item_total FROM invoice_items WHERE invoice_id = $1 ORDER BY id ASC",
                 [id],
             );
-            invoice.items = itemsResult.rows;
 
-            return invoice;
+            return {
+                ...invoice,
+                id: String(invoice.id),
+                items: itemsResult.rows.map((item) => ({
+                    ...item,
+                    id: String(item.id),
+                    invoice_id: String(item.invoice_id),
+                })),
+            };
         } catch (err) {
             throw err;
         }
@@ -304,8 +319,9 @@ export class InvoiceService {
             }
 
             const itemsResult = await client.query(
-                `SELECT item_description, item_quantity, item_price, item_total 
-                 FROM invoice_items WHERE invoice_id = $1`,
+                `SELECT id, invoice_id, item_description, item_quantity, item_price, item_total 
+                 FROM invoice_items WHERE invoice_id = $1
+                 ORDER BY id ASC`,
                 [id],
             );
 
@@ -313,7 +329,12 @@ export class InvoiceService {
 
             return {
                 ...result.rows[0],
-                items: itemsResult.rows,
+                id: String(result.rows[0].id),
+                items: itemsResult.rows.map((item) => ({
+                    ...item,
+                    id: String(item.id),
+                    invoice_id: String(item.invoice_id),
+                })),
             };
         } catch (err) {
             await client.query("ROLLBACK");
@@ -343,8 +364,9 @@ export class InvoiceService {
             }
 
             const itemsResult = await client.query(
-                `SELECT item_description, item_quantity, item_price, item_total 
-                 FROM invoice_items WHERE invoice_id = $1`,
+                `SELECT id, invoice_id, item_description, item_quantity, item_price, item_total 
+                 FROM invoice_items WHERE invoice_id = $1
+                 ORDER BY id ASC`,
                 [id],
             );
 
@@ -352,7 +374,12 @@ export class InvoiceService {
 
             return {
                 ...result.rows[0],
-                items: itemsResult.rows,
+                id: String(result.rows[0].id),
+                items: itemsResult.rows.map((item) => ({
+                    ...item,
+                    id: String(item.id),
+                    invoice_id: String(item.invoice_id),
+                })),
             };
         } catch (err) {
             await client.query("ROLLBACK");
