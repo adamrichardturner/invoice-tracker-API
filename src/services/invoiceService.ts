@@ -1,6 +1,12 @@
 import { pool } from "../config/database";
 import Decimal from "decimal.js";
 import { Invoice } from "../models/invoice";
+import {
+    decodeInvoiceCursor,
+    encodeInvoiceCursor,
+    GetInvoicesOptions,
+    PaginatedInvoices,
+} from "../utils/pagination";
 
 export class InvoiceService {
     static async createInvoice(data: Invoice): Promise<Invoice> {
@@ -65,12 +71,14 @@ export class InvoiceService {
                 ],
             );
             const invoice_id = result.rows[0].id;
+            const createdItems = [];
 
             for (const item of items || []) {
-                await client.query(
+                const itemResult = await client.query(
                     `INSERT INTO invoice_items (
                         invoice_id, item_description, item_quantity, item_price, item_total
-                    ) VALUES ($1, $2, $3, $4, $5)`,
+                    ) VALUES ($1, $2, $3, $4, $5)
+                    RETURNING id, invoice_id, item_description, item_quantity, item_price, item_total`,
                     [
                         invoice_id,
                         item.item_description,
@@ -81,13 +89,19 @@ export class InvoiceService {
                             .toNumber(),
                     ],
                 );
+                createdItems.push({
+                    ...itemResult.rows[0],
+                    id: String(itemResult.rows[0].id),
+                    invoice_id: String(itemResult.rows[0].invoice_id),
+                });
             }
 
             await client.query("COMMIT");
 
             return {
                 ...result.rows[0],
-                items,
+                id: String(result.rows[0].id),
+                items: createdItems,
             };
         } catch (err) {
             await client.query("ROLLBACK");
@@ -97,28 +111,85 @@ export class InvoiceService {
         }
     }
 
-    static async getInvoices(): Promise<Invoice[]> {
-        try {
-            const invoicesResult = await pool.query("SELECT * FROM invoices");
-            const invoices = invoicesResult.rows;
+    static async getInvoices(
+        options: GetInvoicesOptions = {},
+    ): Promise<PaginatedInvoices<Invoice>> {
+        const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+        const statuses = options.statuses ?? [];
 
-            const invoicePromises = invoices.map(async (invoice) => {
-                const itemsResult = await pool.query(
-                    "SELECT * FROM invoice_items WHERE invoice_id = $1",
-                    [invoice.id],
-                );
-                return {
-                    ...invoice,
-                    items: itemsResult.rows,
-                };
-            });
+        const values: Array<string | number | string[]> = [];
+        const whereClauses: string[] = [];
 
-            const invoicesWithItems = await Promise.all(invoicePromises);
-
-            return invoicesWithItems;
-        } catch (err) {
-            throw err;
+        if (statuses.length > 0) {
+            values.push(statuses);
+            whereClauses.push(`status = ANY($${values.length}::text[])`);
         }
+
+        if (options.cursor) {
+            const decoded = decodeInvoiceCursor(options.cursor);
+            values.push(decoded.createdAt);
+            const createdAtParam = values.length;
+            values.push(decoded.id);
+            const idParam = values.length;
+            whereClauses.push(
+                `(created_at, id) < ($${createdAtParam}::timestamptz, $${idParam}::int)`,
+            );
+        }
+
+        const whereSql =
+            whereClauses.length > 0
+                ? `WHERE ${whereClauses.join(" AND ")}`
+                : "";
+
+        const countValues: Array<string[]> = [];
+        let countWhereSql = "";
+        if (statuses.length > 0) {
+            countValues.push(statuses);
+            countWhereSql = "WHERE status = ANY($1::text[])";
+        }
+
+        const countResult = await pool.query(
+            `SELECT COUNT(*)::int AS count FROM invoices ${countWhereSql}`,
+            countValues,
+        );
+        const totalCount: number = countResult.rows[0].count;
+
+        values.push(limit + 1);
+        const limitParam = values.length;
+
+        const invoicesResult = await pool.query(
+            `SELECT * FROM invoices
+             ${whereSql}
+             ORDER BY created_at DESC, id DESC
+             LIMIT $${limitParam}`,
+            values,
+        );
+
+        const rows = invoicesResult.rows;
+        const hasMore = rows.length > limit;
+        const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+        const lastRow = pageRows[pageRows.length - 1] as
+            | { created_at: Date | string; id: number | string }
+            | undefined;
+
+        const nextCursor =
+            hasMore && lastRow
+                ? encodeInvoiceCursor(lastRow.created_at, Number(lastRow.id))
+                : null;
+
+        const data: Invoice[] = pageRows.map((invoice) => ({
+            ...invoice,
+            id: String(invoice.id),
+            items: [],
+        }));
+
+        return {
+            data,
+            nextCursor,
+            hasMore,
+            totalCount,
+        };
     }
 
     static async getInvoiceById(id: number): Promise<Invoice> {
@@ -134,12 +205,19 @@ export class InvoiceService {
             const invoice = invoiceResult.rows[0];
 
             const itemsResult = await pool.query(
-                "SELECT * FROM invoice_items WHERE invoice_id = $1",
+                "SELECT id, invoice_id, item_description, item_quantity, item_price, item_total FROM invoice_items WHERE invoice_id = $1 ORDER BY id ASC",
                 [id],
             );
-            invoice.items = itemsResult.rows;
 
-            return invoice;
+            return {
+                ...invoice,
+                id: String(invoice.id),
+                items: itemsResult.rows.map((item) => ({
+                    ...item,
+                    id: String(item.id),
+                    invoice_id: String(item.invoice_id),
+                })),
+            };
         } catch (err) {
             throw err;
         }
@@ -241,8 +319,9 @@ export class InvoiceService {
             }
 
             const itemsResult = await client.query(
-                `SELECT item_description, item_quantity, item_price, item_total 
-                 FROM invoice_items WHERE invoice_id = $1`,
+                `SELECT id, invoice_id, item_description, item_quantity, item_price, item_total 
+                 FROM invoice_items WHERE invoice_id = $1
+                 ORDER BY id ASC`,
                 [id],
             );
 
@@ -250,7 +329,12 @@ export class InvoiceService {
 
             return {
                 ...result.rows[0],
-                items: itemsResult.rows,
+                id: String(result.rows[0].id),
+                items: itemsResult.rows.map((item) => ({
+                    ...item,
+                    id: String(item.id),
+                    invoice_id: String(item.invoice_id),
+                })),
             };
         } catch (err) {
             await client.query("ROLLBACK");
@@ -280,8 +364,9 @@ export class InvoiceService {
             }
 
             const itemsResult = await client.query(
-                `SELECT item_description, item_quantity, item_price, item_total 
-                 FROM invoice_items WHERE invoice_id = $1`,
+                `SELECT id, invoice_id, item_description, item_quantity, item_price, item_total 
+                 FROM invoice_items WHERE invoice_id = $1
+                 ORDER BY id ASC`,
                 [id],
             );
 
@@ -289,7 +374,12 @@ export class InvoiceService {
 
             return {
                 ...result.rows[0],
-                items: itemsResult.rows,
+                id: String(result.rows[0].id),
+                items: itemsResult.rows.map((item) => ({
+                    ...item,
+                    id: String(item.id),
+                    invoice_id: String(item.invoice_id),
+                })),
             };
         } catch (err) {
             await client.query("ROLLBACK");

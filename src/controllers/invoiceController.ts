@@ -24,10 +24,72 @@ export const createInvoice = async (req: Request, res: Response) => {
 
 export const getInvoices = async (req: Request, res: Response) => {
     try {
-        const invoices = await InvoiceService.getInvoices();
-        res.json(invoices);
+        const limitParam = req.query.limit;
+        const cursorParam = req.query.cursor;
+        const statusParam = req.query.status;
+
+        const limit =
+            typeof limitParam === "string"
+                ? Number.parseInt(limitParam, 10)
+                : 20;
+
+        if (Number.isNaN(limit)) {
+            res.status(400).json({ message: "Invalid limit" });
+            return;
+        }
+
+        const cursor =
+            typeof cursorParam === "string" && cursorParam.length > 0
+                ? cursorParam
+                : null;
+
+        const statuses: Array<"draft" | "pending" | "paid"> = [];
+        const allowedStatuses = new Set(["draft", "pending", "paid"]);
+
+        if (typeof statusParam === "string") {
+            for (const value of statusParam.split(",")) {
+                const status = value.trim();
+                if (status.length === 0) {
+                    continue;
+                }
+                if (!allowedStatuses.has(status)) {
+                    res.status(400).json({
+                        message: `Invalid status: ${status}`,
+                    });
+                    return;
+                }
+                statuses.push(status as "draft" | "pending" | "paid");
+            }
+        }
+
+        if (Array.isArray(statusParam)) {
+            for (const value of statusParam) {
+                if (typeof value !== "string") {
+                    continue;
+                }
+                if (!allowedStatuses.has(value)) {
+                    res.status(400).json({
+                        message: `Invalid status: ${value}`,
+                    });
+                    return;
+                }
+                statuses.push(value as "draft" | "pending" | "paid");
+            }
+        }
+
+        const result = await InvoiceService.getInvoices({
+            limit,
+            cursor,
+            statuses,
+        });
+
+        res.json(result);
     } catch (err) {
         console.error("Error in getInvoices:", err);
+        if (err instanceof Error && err.message === "Invalid cursor") {
+            res.status(400).json({ message: "Invalid cursor" });
+            return;
+        }
         res.status(500).send("Server error.");
     }
 };

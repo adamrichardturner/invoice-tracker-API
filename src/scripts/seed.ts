@@ -354,7 +354,7 @@ const luxuryItemsCatalogue: SeedItem[] = [
     },
     {
         item_description: "Silk tie (Royal Navy)",
-        item_quantity: 2,
+        item_quantity: 1,
         item_price: 95.0,
     },
     {
@@ -394,7 +394,7 @@ const luxuryItemsCatalogue: SeedItem[] = [
     },
     {
         item_description: "Silk pocket square (Burgundy)",
-        item_quantity: 3,
+        item_quantity: 1,
         item_price: 45.0,
     },
     {
@@ -404,7 +404,7 @@ const luxuryItemsCatalogue: SeedItem[] = [
     },
     {
         item_description: "Leather-bound notebook",
-        item_quantity: 4,
+        item_quantity: 1,
         item_price: 38.0,
     },
     {
@@ -414,7 +414,7 @@ const luxuryItemsCatalogue: SeedItem[] = [
     },
     {
         item_description: "Bespoke dress shirt",
-        item_quantity: 2,
+        item_quantity: 1,
         item_price: 220.0,
     },
     {
@@ -427,6 +427,56 @@ const luxuryItemsCatalogue: SeedItem[] = [
         item_quantity: 1,
         item_price: 380.0,
     },
+    {
+        item_description: "Harris Tweed flat cap",
+        item_quantity: 1,
+        item_price: 85.0,
+    },
+    {
+        item_description: "Sterling silver hip flask",
+        item_quantity: 1,
+        item_price: 295.0,
+    },
+    {
+        item_description: "Merino wool scarf",
+        item_quantity: 1,
+        item_price: 120.0,
+    },
+    {
+        item_description: "Oak humidor",
+        item_quantity: 1,
+        item_price: 680.0,
+    },
+    {
+        item_description: "Champagne flute set (pair)",
+        item_quantity: 1,
+        item_price: 175.0,
+    },
+    {
+        item_description: "Saddle leather cardholder",
+        item_quantity: 1,
+        item_price: 95.0,
+    },
+    {
+        item_description: "Tortoiseshell reading glasses",
+        item_quantity: 1,
+        item_price: 340.0,
+    },
+    {
+        item_description: "Alpine cashmere throw",
+        item_quantity: 1,
+        item_price: 510.0,
+    },
+    {
+        item_description: "Porcelain figurine (limited)",
+        item_quantity: 1,
+        item_price: 430.0,
+    },
+    {
+        item_description: "Walnut chess set",
+        item_quantity: 1,
+        item_price: 890.0,
+    },
 ];
 
 function sample<T>(arr: T[]): T {
@@ -438,6 +488,33 @@ function randomInt(minInclusive: number, maxInclusive: number): number {
     const min = Math.ceil(minInclusive);
     const max = Math.floor(maxInclusive);
     return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function buildInvoiceLineItems(): SeedItem[] {
+    const pickCount = randomInt(2, 6);
+    const itemsByDescription: {
+        [description: string]: SeedItem;
+    } = {};
+
+    for (let i = 0; i < pickCount; i += 1) {
+        const base = sample(luxuryItemsCatalogue);
+        const existing = itemsByDescription[base.item_description];
+
+        if (existing) {
+            existing.item_quantity += 1;
+            continue;
+        }
+
+        itemsByDescription[base.item_description] = {
+            item_description: base.item_description,
+            item_price: base.item_price,
+            item_quantity: 1,
+        };
+    }
+
+    return Object.keys(itemsByDescription).map(
+        (description) => itemsByDescription[description],
+    );
 }
 
 function generateRetailerFromAddress(): {
@@ -488,17 +565,7 @@ async function createInvoiceWithItems(index: number): Promise<void> {
     const invoiceDate = new Date();
     invoiceDate.setDate(invoiceDate.getDate() - randomInt(1, 120));
 
-    const itemsCount = randomInt(2, 5);
-    const chosenItems: SeedItem[] = [];
-    for (let i = 0; i < itemsCount; i += 1) {
-        const base = sample(luxuryItemsCatalogue);
-        const quantity = randomInt(1, Math.max(1, base.item_quantity));
-        chosenItems.push({
-            item_description: base.item_description,
-            item_price: base.item_price,
-            item_quantity: quantity,
-        });
-    }
+    const chosenItems = buildInvoiceLineItems();
 
     let invoiceTotal = new Decimal(0);
     for (let i = 0; i < chosenItems.length; i += 1) {
@@ -570,15 +637,16 @@ async function createInvoiceWithItems(index: number): Promise<void> {
 }
 
 async function ensureSeeded(): Promise<void> {
+    const targetCount = 250;
     const result = await pool.query(
         "SELECT COUNT(*)::int AS count FROM invoices",
     );
     const currentCount: number = result.rows[0].count;
-    if (currentCount >= 30) {
+    if (currentCount >= targetCount) {
         return;
     }
 
-    const toCreate = 30 - currentCount;
+    const toCreate = targetCount - currentCount;
     for (let i = 0; i < toCreate; i += 1) {
         // eslint-disable-next-line no-await-in-loop
         await createInvoiceWithItems(currentCount + i);
