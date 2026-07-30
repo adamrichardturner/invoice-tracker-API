@@ -3,7 +3,11 @@
     "build": "tsc",
     "dev": "NODE_ENV=development nodemon src/app.ts",
     "start": "NODE_ENV=production node dist/app.js",
-    "seed": "NODE_ENV=production node dist/scripts/seed.js",
+    "seed": "NODE_ENV=development node dist/scripts/seed.js",
+    "seed:prod": "NODE_ENV=production node dist/scripts/seed.js",
+    "docker:dev": "docker compose -f docker-compose.dev.yml --env-file .env.development.local up --build -d",
+    "docker:prod": "docker compose --env-file .env.production.local up --build -d",
+    "docker:down": "docker compose -f docker-compose.dev.yml --env-file .env.development.local down && docker compose --env-file .env.production.local down",
     "prettier:check": "prettier --check \"src/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "NODE_ENV=development jest"

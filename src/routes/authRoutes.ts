@@ -49,12 +49,13 @@ router.post("/demo-login", async (req: Request, res: Response) => {
             { expiresIn: "24h" },
         );
 
-        // Set cookie
+        const isProduction = process.env.NODE_ENV === "production";
+
         res.cookie("token", token, {
-            domain: ".adamrichardturner.dev",
+            ...(isProduction ? { domain: ".adamrichardturner.dev" } : {}),
             httpOnly: true,
-            secure: true,
-            sameSite: "none",
+            secure: isProduction,
+            sameSite: isProduction ? "none" : "lax",
             maxAge: 24 * 60 * 60 * 1000,
         });
 
